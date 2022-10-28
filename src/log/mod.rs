@@ -5,19 +5,12 @@ pub(super) mod tower;
 pub use layer::Layer;
 
 #[cfg(feature = "log")]
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("Could not set tracing logger: {0}")]
-    Tracing(#[from] tracing::dispatcher::SetGlobalDefaultError),
-}
-
-#[cfg(feature = "log")]
-pub fn setup(level: tracing::Level) -> Result<(), Error> {
+pub fn setup(level: tracing::Level) -> Result<(), super::Error> {
     use tracing_subscriber::layer::SubscriberExt;
 
     let subscriber = tracing_subscriber::registry()
         .with(layer::Layer::new())
         .with(tracing::level_filters::LevelFilter::from_level(level));
 
-    tracing::subscriber::set_global_default(subscriber).map_err(Error::from)
+    tracing::subscriber::set_global_default(subscriber).map_err(super::Error::from)
 }

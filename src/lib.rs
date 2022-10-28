@@ -8,10 +8,31 @@ pub use threads::Threads;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[cfg(feature = "log")]
+    #[error("Could not set tracing logger: {0}")]
+    Tracing(#[from] tracing::dispatcher::SetGlobalDefaultError),
     #[error("Could not build runtime: {0}")]
     Tokio(#[from] tokio::io::Error),
     #[error(transparent)]
     Server(#[from] server::Error),
+}
+
+impl From<Error> for std::process::ExitCode {
+    fn from(error: Error) -> Self {
+        match error {
+            #[cfg(feature = "log")]
+            Error::Tracing(_) => std::process::ExitCode::from(1),
+            Error::Tokio(_) => std::process::ExitCode::from(2),
+            Error::Server(server::Error::Tokio(_)) => std::process::ExitCode::from(3),
+            Error::Server(server::Error::Hyper(_)) => std::process::ExitCode::from(4),
+        }
+    }
+}
+
+impl std::process::Termination for Error {
+    fn report(self) -> std::process::ExitCode {
+        self.into()
+    }
 }
 
 #[tracing::instrument]
@@ -32,7 +53,7 @@ fn runtime(threads: Threads) -> tokio::runtime::Builder {
 
 pub fn serve(
     router: axum::Router,
-    addr: std::net::SocketAddr,
+    addr: impl Into<std::net::SocketAddr>,
     #[cfg(feature = "threads")] threads: Threads,
 ) -> Result<(), Error> {
     #[cfg(not(feature = "threads"))]
@@ -41,7 +62,7 @@ pub fn serve(
     runtime(threads)
         .enable_all()
         .build()?
-        .block_on(server::run(router, addr))
+        .block_on(server::run(router, addr.into()))
         .map_err(Error::from)
 }
 
