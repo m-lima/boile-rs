@@ -37,9 +37,8 @@ impl std::process::Termination for Error {
     }
 }
 
-#[tracing::instrument]
 fn runtime(threads: Threads) -> tokio::runtime::Builder {
-    tracing::info!("Building tokio runtime");
+    tracing::info!(?threads, "Building tokio runtime");
     match threads {
         #[cfg(feature = "threads")]
         Threads::Auto => tokio::runtime::Builder::new_multi_thread(),

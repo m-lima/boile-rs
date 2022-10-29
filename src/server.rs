@@ -15,14 +15,14 @@ pub(super) async fn run(router: axum::Router, addr: std::net::SocketAddr) -> Res
         .layer(tower_http::catch_panic::CatchPanicLayer::new())
         .layer(log::tower::layer());
 
-    tracing::info!(addr = %addr, "Binding to address");
+    tracing::info!(%addr, "Binding to address");
 
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .with_graceful_shutdown(shutdown::hook()?)
         .await?;
 
-    tracing::info!("Server gracefully shutdown after {:?}", start.elapsed());
+    tracing::info!(duration = ?start.elapsed(), "Server gracefully shutdown");
     Ok(())
 }
 
