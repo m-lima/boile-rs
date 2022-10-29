@@ -79,8 +79,7 @@ mod trace {
         fn make_span(&mut self, request: &axum::http::Request<axum::body::Body>) -> tracing::Span {
             let method = request.method();
             let uri = request.uri();
-            let headers = request.headers();
-            tracing::info_span!("request", %method, %uri, ?headers)
+            tracing::info_span!("request", %method, %uri)
         }
     }
 }
