@@ -25,11 +25,11 @@ mod trace {
                 ($level:expr, $color:literal, $status:ident, $maybe_type:ident, $maybe_length:ident, $latency:ident) => {
                     match ($maybe_type, $maybe_length) {
                         (Some(content), Some(length)) => {
-                            tracing::event!($level, %content, %length, ?$latency, concat!($color, "{}[m"), $status);
+                            tracing::event!($level, %content, %length, ?$latency, concat!($color, "{}[m"), $status);
                         }
-                        (Some(content), None) => tracing::event!($level, %content, ?$latency, concat!($color, "{}[m"), $status),
-                        (None, Some(length)) => tracing::event!($level, %length, ?$latency, concat!($color, "{}[m"), $status),
-                        (None, None) => tracing::event!($level, ?$latency, concat!($color, "{}[m"), $status),
+                        (Some(content), None) => tracing::event!($level, %content, ?$latency, concat!($color, "{}[m"), $status),
+                        (None, Some(length)) => tracing::event!($level, %length, ?$latency, concat!($color, "{}[m"), $status),
+                        (None, None) => tracing::event!($level, ?$latency, concat!($color, "{}[m"), $status),
                     }
                 }
             }
@@ -46,7 +46,7 @@ mod trace {
             match status {
                 0..=399 => log!(
                     tracing::Level::INFO,
-                    "[32m",
+                    "[32m",
                     status,
                     maybe_type,
                     maybe_length,
@@ -54,7 +54,7 @@ mod trace {
                 ),
                 400..=499 => log!(
                     tracing::Level::INFO,
-                    "[33m",
+                    "[33m",
                     status,
                     maybe_type,
                     maybe_length,
@@ -62,7 +62,7 @@ mod trace {
                 ),
                 500..=u16::MAX => log!(
                     tracing::Level::ERROR,
-                    "[31m",
+                    "[31m",
                     status,
                     maybe_type,
                     maybe_length,
