@@ -58,20 +58,23 @@ impl tracing_subscriber::Layer<tracing_subscriber::Registry> for Layer {
                 span.extensions_mut().insert(SpanInfo::new(attrs));
             }
 
-            let mut stdout = std::io::stdout().lock();
+            #[cfg(feature = "log-spans")]
+            {
+                let mut stdout = std::io::stdout().lock();
 
-            let depth = ctx.span_scope(id).map_or(0, std::iter::Iterator::count);
-            let last_span = self.last_span.load(std::sync::atomic::Ordering::Relaxed);
+                let depth = ctx.span_scope(id).map_or(0, std::iter::Iterator::count);
+                let last_span = self.last_span.load(std::sync::atomic::Ordering::Relaxed);
 
-            print_span(
-                &mut stdout,
-                last_span,
-                depth.max(1) - 1,
-                Some(span).as_ref(),
-            );
+                print_span(
+                    &mut stdout,
+                    last_span,
+                    depth.max(1) - 1,
+                    Some(span).as_ref(),
+                );
 
-            self.last_span
-                .store(id.into_u64(), std::sync::atomic::Ordering::Relaxed);
+                self.last_span
+                    .store(id.into_u64(), std::sync::atomic::Ordering::Relaxed);
+            }
         }
     }
 

@@ -76,6 +76,14 @@ mod trace {
     pub struct Span;
 
     impl tower_http::trace::MakeSpan<axum::body::Body> for Span {
+        #[cfg(feature = "log-headers")]
+        fn make_span(&mut self, request: &axum::http::Request<axum::body::Body>) -> tracing::Span {
+            let method = request.method();
+            let uri = request.uri();
+            let headers = request.headers();
+            tracing::info_span!("request", %method, %uri, ?headers)
+        }
+        #[cfg(not(feature = "log-headers"))]
         fn make_span(&mut self, request: &axum::http::Request<axum::body::Body>) -> tracing::Span {
             let method = request.method();
             let uri = request.uri();

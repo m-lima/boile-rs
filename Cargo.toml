@@ -4,9 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = [ "threads", "log" ]
+default = [ "threads", "log-spans" ]
 threads = [ "tokio/rt-multi-thread" ]
 log = []
+log-headers = ["log"]
+log-spans = ["log"]
 
 [dependencies]
 # Server
