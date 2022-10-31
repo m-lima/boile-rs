@@ -133,7 +133,7 @@ fn print_span(
 
                 std::mem::drop(write!(
                     out,
-                    "[;2m[{timestamp}][m {indent:>0$}[m{path}::{name}{arrow} [37m[{id:04x}][36m",
+                    "[;2m[{timestamp}][m {indent:>0$}[m{path}::[37m{name}{arrow} [37m[{id:04x}][36m",
                     depth * 2,
                     timestamp = info.date_time.format("%Y-%m-%d %H:%M:%S"),
                     indent = "",
