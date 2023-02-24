@@ -16,6 +16,8 @@ pub enum Error {
     Tracing(#[from] tracing::dispatcher::SetGlobalDefaultError),
     #[error("Could not build runtime: {0}")]
     Tokio(#[from] tokio::io::Error),
+    #[error("Could not join task: {0}")]
+    TaskJoin(#[from] tokio::task::JoinError),
     #[error(transparent)]
     Server(#[from] server::Error),
 }
@@ -26,8 +28,9 @@ impl From<Error> for std::process::ExitCode {
             #[cfg(feature = "log")]
             Error::Tracing(_) => std::process::ExitCode::from(1),
             Error::Tokio(_) => std::process::ExitCode::from(2),
-            Error::Server(server::Error::Tokio(_)) => std::process::ExitCode::from(3),
-            Error::Server(server::Error::Hyper(_)) => std::process::ExitCode::from(4),
+            Error::TaskJoin(_) => std::process::ExitCode::from(3),
+            Error::Server(server::Error::Tokio(_)) => std::process::ExitCode::from(4),
+            Error::Server(server::Error::Hyper(_)) => std::process::ExitCode::from(5),
         }
     }
 }
@@ -65,6 +68,31 @@ pub fn serve(
         .enable_all()
         .build()?
         .block_on(server::run(router, addr.into()))
+        .map_err(Error::from)
+}
+
+pub fn serve_multiple(
+    servers: impl Iterator<Item = (std::net::SocketAddr, axum::Router)>,
+    #[cfg(feature = "threads")] threads: Threads,
+) -> Result<(), Error> {
+    #[cfg(not(feature = "threads"))]
+    let threads = Threads::Single;
+
+    runtime(threads)
+        .enable_all()
+        .build()?
+        .block_on(async {
+            let mut result = Ok(());
+            let servers = servers
+                .map(|(addr, router)| tokio::spawn(server::run(router, addr)))
+                .collect::<Vec<_>>();
+            for server in servers {
+                if let Err(e) = server.await {
+                    result = Err(e);
+                }
+            }
+            result
+        })
         .map_err(Error::from)
 }
 
