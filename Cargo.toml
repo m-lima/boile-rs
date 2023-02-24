@@ -9,6 +9,7 @@ export = []
 log = []
 log-headers = ["log"]
 log-spans = ["log"]
+multi-line = []
 threads = ["tokio/rt-multi-thread"]
 
 [dependencies]

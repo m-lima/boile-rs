@@ -137,12 +137,20 @@ fn print_span(
                     depth * 2,
                     timestamp = info.date_time.format("%Y-%m-%d %H:%M:%S"),
                     indent = "",
-                    path = span.metadata().module_path().unwrap_or(""),
+                    path = span.metadata().target(),
                     name = span.name(),
                     arrow = if new { " " } else { "[93m^" },
                     id = info.id,
                 ));
                 for (k, v) in &info.records {
+                    #[cfg(feature = "multi-line")]
+                    std::mem::drop(write!(
+                        out,
+                        "\n{indent:>0$}- [2m{k}: [22m{v}",
+                        depth * 2 + 22,
+                        indent = ""
+                    ));
+                    #[cfg(not(feature = "multi-line"))]
                     std::mem::drop(write!(out, " [2m{k}: [22m{v}"));
                 }
                 std::mem::drop(writeln!(out, "[m"));
@@ -154,23 +162,37 @@ fn print_span(
 }
 
 fn print_event(out: &mut impl std::io::Write, event: &tracing::Event<'_>, depth: usize) {
-    struct Visitor<'a, W>(&'a mut W, Option<String>, bool);
-
-    impl<W: std::io::Write> tracing_subscriber::field::Visit for Visitor<'_, W> {
+    struct Messenger<'w, W>(&'w mut W);
+    impl<W: std::io::Write> tracing_subscriber::field::Visit for Messenger<'_, W> {
         fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
             if field.name() == "message" {
-                self.1 = Some(format!("{value:?}"));
-            } else {
-                self.2 = true;
-                std::mem::drop(write!(self.0, " [2m{field}: [22m{value:?}"));
+                std::mem::drop(write!(self.0, " {value:?}",));
             }
         }
     }
 
+    struct Fielder<'w, W>(&'w mut W, usize);
+    impl<W: std::io::Write> tracing_subscriber::field::Visit for Fielder<'_, W> {
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+            if field.name() != "message" {
+                #[cfg(feature = "multi-line")]
+                std::mem::drop(write!(
+                    self.0,
+                    "\n{indent:>0$}- [36;2m{field}: [22m{value:?}",
+                    self.1 + 22,
+                    indent = ""
+                ));
+                #[cfg(not(feature = "multi-line"))]
+                std::mem::drop(write!(self.0, " [36;2m{field}: [22m{value:?}"));
+            }
+        }
+    }
+
+    let depth = depth * 2;
     std::mem::drop(write!(
         out,
         "[;2m[{timestamp}][m {indent:>0$}{level}[m",
-        depth * 2,
+        depth,
         timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S"),
         indent = "",
         level = match *event.metadata().level() {
@@ -192,15 +214,7 @@ fn print_event(out: &mut impl std::io::Write, event: &tracing::Event<'_>, depth:
         }
     ));
 
-    let mut visitor = Visitor(out, None, false);
-    event.record(&mut visitor);
-    if let Some(message) = visitor.1 {
-        if visitor.2 {
-            std::mem::drop(writeln!(out, " :: {message}"));
-        } else {
-            std::mem::drop(writeln!(out, " {message}"));
-        }
-    } else {
-        std::mem::drop(writeln!(out));
-    }
+    event.record(&mut Messenger(out));
+    event.record(&mut Fielder(out, depth));
+    std::mem::drop(writeln!(out));
 }

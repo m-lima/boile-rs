@@ -22,18 +22,23 @@ mod trace {
             _: &tracing::Span,
         ) {
             macro_rules! log {
-                ($level:expr, $color:literal, $status:ident, $maybe_type:ident, $maybe_length:ident, $latency:ident) => {
+                ($level: expr, $color: literal, $status: ident, $maybe_type: ident, $maybe_length: ident, $latency: ident) => {{
+                    let (reason, spacer) = if let Some(reason) = $status.canonical_reason() {
+                        (reason, " ")
+                    } else {
+                        ("", "")
+                    };
                     match ($maybe_type, $maybe_length) {
                         (Some(content), Some(length)) => {
-                            tracing::event!($level, %content, %length, ?$latency, concat!($color, "{}[m"), $status);
+                            tracing::event!($level, %content, %length, ?$latency, concat!("{}{}", $color, "{}[m"), reason, spacer, $status.as_u16());
                         }
-                        (Some(content), None) => tracing::event!($level, %content, ?$latency, concat!($color, "{}[m"), $status),
-                        (None, Some(length)) => tracing::event!($level, %length, ?$latency, concat!($color, "{}[m"), $status),
-                        (None, None) => tracing::event!($level, ?$latency, concat!($color, "{}[m"), $status),
+                        (Some(content), None) => tracing::event!($level, %content, ?$latency, concat!("{}{}", $color, "{}[m"), reason, spacer, $status.as_u16()),
+                        (None, Some(length)) => tracing::event!($level, %length, ?$latency, concat!("{}{}", $color, "{}[m"), reason, spacer, $status.as_u16()),
+                        (None, None) => tracing::event!($level, ?$latency, concat!("{}{}", $color, "{}[m"), reason, spacer, $status.as_u16()),
                     }
-                }
+                }}
             }
-            let status = response.status().as_u16();
+            let status = response.status();
             let headers = response.headers();
             let maybe_type = headers
                 .get(axum::http::header::CONTENT_TYPE)
@@ -43,7 +48,7 @@ mod trace {
                 .and_then(|s| s.to_str().ok())
                 .and_then(|s| s.parse::<usize>().ok())
                 .filter(|l| *l > 0);
-            match status {
+            match status.as_u16() {
                 0..=399 => log!(
                     tracing::Level::INFO,
                     "[32m",
@@ -81,13 +86,13 @@ mod trace {
             let method = request.method();
             let uri = request.uri();
             let headers = request.headers();
-            tracing::info_span!("request", %method, %uri, ?headers)
+            tracing::info_span!(target: env!("CARGO_CRATE_NAME"), "request", %method, %uri, ?headers)
         }
         #[cfg(not(feature = "log-headers"))]
         fn make_span(&mut self, request: &axum::http::Request<axum::body::Body>) -> tracing::Span {
             let method = request.method();
             let uri = request.uri();
-            tracing::info_span!("request", %method, %uri)
+            tracing::info_span!(target: env!("CARGO_CRATE_NAME"), "request", %method, %uri)
         }
     }
 }
