@@ -81,19 +81,44 @@ mod trace {
     pub struct Span;
 
     impl tower_http::trace::MakeSpan<hyper::Body> for Span {
-        #[cfg(feature = "log-headers")]
-        fn make_span(&mut self, request: &hyper::Request<hyper::Body>) -> tracing::Span {
-            let method = request.method();
-            let uri = request.uri();
-            let headers = request.headers();
-            // tracing::info_span!(target: env!("CARGO_CRATE_NAME"), "request", %method, %uri, ?headers)
-            tracing::info_span!(target: "", "", request_method = %method, request_path = %uri, ?headers)
-        }
         #[cfg(not(feature = "log-headers"))]
         fn make_span(&mut self, request: &hyper::Request<hyper::Body>) -> tracing::Span {
             let method = request.method();
             let uri = request.uri();
-            tracing::info_span!(target: "", "", request_method = %method, request_path = %uri)
+
+            #[cfg(feature = "log-headers")]
+            macro_rules! log_event {
+                ("EXTENSION") => {{
+                    let headers = request.headers();
+                    tracing::info_span!(target: "", "EXTENSION", message = %uri, %method, ?headers)
+                }};
+                ($method: literal) => {{
+                    let headers = request.headers();
+                    tracing::info_span!(target: "", $method, message = %uri, ?headers)
+                }};
+            }
+            #[cfg(not(feature = "log-headers"))]
+            macro_rules! log_event {
+                ("EXTENSION") => {
+                    tracing::info_span!(target: "", "EXTENSION", message = %uri, %method)
+                };
+                ($method: literal) => {
+                    tracing::info_span!(target: "", $method, message = %uri)
+                };
+            }
+
+            match *method {
+                axum::http::Method::OPTIONS => log_event!("OPTIONS"),
+                axum::http::Method::GET => log_event!("GET"),
+                axum::http::Method::POST => log_event!("POST"),
+                axum::http::Method::PUT => log_event!("PUT"),
+                axum::http::Method::DELETE => log_event!("DELETE"),
+                axum::http::Method::HEAD => log_event!("HEAD"),
+                axum::http::Method::TRACE => log_event!("TRACE"),
+                axum::http::Method::CONNECT => log_event!("CONNECT"),
+                axum::http::Method::PATCH => log_event!("PATCH"),
+                _ => log_event!("EXTENSION"),
+            }
         }
     }
 }

@@ -146,70 +146,55 @@ fn print_span(
             if span.id().into_u64() != last_span || new {
                 print_span(out, last_span, depth.max(1) - 1, span.parent().as_ref());
 
-                let mut method = None;
-                let mut path = None;
+                let path = span.metadata().target();
+                let name = span.name();
+                let div = if path.is_empty() || name.is_empty() {
+                    ""
+                } else {
+                    "::"
+                };
+
+                drop(write!(
+                    out,
+                    "[;2m[{timestamp}][m {indent:>0$}[m{path}{div}[37m{name}",
+                    depth * 2,
+                    timestamp = info.date_time.format("%Y-%m-%d %H:%M:%S"),
+                    indent = "",
+                ));
 
                 for (k, v) in &info.records {
-                    match *k {
-                        "request_method" => method = Some(v),
-                        "request_path" => path = Some(v),
-                        _ => {}
+                    if *k == "message" {
+                        let space = if path.is_empty() && name.is_empty() {
+                            ""
+                        } else {
+                            " "
+                        };
+                        drop(write!(out, "[m{space}{v}"));
+                        break;
                     }
                 }
 
-                if let (Some(method), Some(path)) = (method, path) {
+                drop(write!(
+                    out,
+                    "{arrow} [37m[{id:04x}][36m",
+                    arrow = if new { " " } else { "[93m^" },
+                    id = info.id,
+                ));
+
+                for (k, v) in &info.records {
+                    if *k == "message" {
+                        continue;
+                    }
+
+                    #[cfg(feature = "multi-line")]
                     drop(write!(
                         out,
-                        "[;2m[{timestamp}][m {indent:>0$}[37m{method}[m {path}[37m{arrow} [37m[{id:04x}][36m",
-                        depth * 2,
-                        timestamp = info.date_time.format("%Y-%m-%d %H:%M:%S"),
-                        indent = "",
-                        arrow = if new { " " } else { "[93m^" },
-                        id = info.id,
+                        "\n{indent:>0$}- [2m{k}: [22m{v}",
+                        depth * 2 + 22,
+                        indent = ""
                     ));
-
-                    for (k, v) in &info.records {
-                        match *k {
-                            "request_method" | "request_path" => continue,
-                            k => {
-                                #[cfg(feature = "multi-line")]
-                                drop(write!(
-                                    out,
-                                    "\n{indent:>0$}- [2m{k}: [22m{v}",
-                                    depth * 2 + 22,
-                                    indent = ""
-                                ));
-                                #[cfg(not(feature = "multi-line"))]
-                                drop(write!(out, " [2m{k}: [22m{v}"));
-                            }
-                        }
-                    }
-                } else {
-                    let path = span.metadata().target();
-                    let name = span.name();
-
-                    drop(write!(
-                        out,
-                        "[;2m[{timestamp}][m {indent:>0$}[m{path}{div}[37m{name}{arrow} [37m[{id:04x}][36m",
-                        depth * 2,
-                        timestamp = info.date_time.format("%Y-%m-%d %H:%M:%S"),
-                        indent = "",
-                        div = if path.is_empty() || name.is_empty() { "" } else {"::"},
-                        arrow = if new { " " } else { "[93m^" },
-                        id = info.id,
-                    ));
-
-                    for (k, v) in &info.records {
-                        #[cfg(feature = "multi-line")]
-                        drop(write!(
-                            out,
-                            "\n{indent:>0$}- [2m{k}: [22m{v}",
-                            depth * 2 + 22,
-                            indent = ""
-                        ));
-                        #[cfg(not(feature = "multi-line"))]
-                        drop(write!(out, " [2m{k}: [22m{v}"));
-                    }
+                    #[cfg(not(feature = "multi-line"))]
+                    drop(write!(out, " [2m{k}: [22m{v}"));
                 }
                 drop(writeln!(out, "[m"));
             }
