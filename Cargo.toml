@@ -5,12 +5,12 @@ edition = "2021"
 
 [features]
 default = ["threads", "log-spans", "export"]
-export = []
-log = []
-log-headers = ["log"]
-log-spans = ["log"]
-multi-line = []
-threads = ["tokio/rt-multi-thread"]
+export = []                         # Re-export dependencies
+log = []                            # Enable logging
+log-headers = ["log"]               # Log the request headers
+log-spans = ["log"]                 # Always log spans even when no events are emitted
+multi-line = []                     # Display the log fields in separate lines
+threads = ["tokio/rt-multi-thread"] # Use multi-thread with tokio
 
 [dependencies]
 axum = "0.6.7"

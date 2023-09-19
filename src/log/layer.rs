@@ -124,6 +124,21 @@ fn print_span(
     depth: usize,
     span: Option<&tracing_subscriber::registry::SpanRef<'_, tracing_subscriber::Registry>>,
 ) {
+    struct SpecialField<'w, W>(&'w mut W, &'static str);
+    impl<W: std::io::Write> tracing_subscriber::field::Visit for SpecialField<'_, W> {
+        fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+            if field.name() == self.1 {
+                drop(write!(self.0, "{value}"));
+            }
+        }
+
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+            if field.name() == self.1 {
+                drop(write!(self.0, "{value:?}"));
+            }
+        }
+    }
+
     if let Some(span) = span {
         if let Some(info) = span.extensions().get::<SpanInfo>() {
             let new = info.new.swap(false, std::sync::atomic::Ordering::Relaxed);
@@ -131,32 +146,75 @@ fn print_span(
             if span.id().into_u64() != last_span || new {
                 print_span(out, last_span, depth.max(1) - 1, span.parent().as_ref());
 
-                std::mem::drop(write!(
-                    out,
-                    "[;2m[{timestamp}][m {indent:>0$}[m{path}::[37m{name}{arrow} [37m[{id:04x}][36m",
-                    depth * 2,
-                    timestamp = info.date_time.format("%Y-%m-%d %H:%M:%S"),
-                    indent = "",
-                    path = span.metadata().target(),
-                    name = span.name(),
-                    arrow = if new { " " } else { "[93m^" },
-                    id = info.id,
-                ));
+                let mut method = None;
+                let mut path = None;
+
                 for (k, v) in &info.records {
-                    #[cfg(feature = "multi-line")]
-                    std::mem::drop(write!(
-                        out,
-                        "\n{indent:>0$}- [2m{k}: [22m{v}",
-                        depth * 2 + 22,
-                        indent = ""
-                    ));
-                    #[cfg(not(feature = "multi-line"))]
-                    std::mem::drop(write!(out, " [2m{k}: [22m{v}"));
+                    match *k {
+                        "request_method" => method = Some(v),
+                        "request_path" => path = Some(v),
+                        _ => {}
+                    }
                 }
-                std::mem::drop(writeln!(out, "[m"));
+
+                if let (Some(method), Some(path)) = (method, path) {
+                    drop(write!(
+                        out,
+                        "[;2m[{timestamp}][m {indent:>0$}[37m{method}[m {path}[37m{arrow} [37m[{id:04x}][36m",
+                        depth * 2,
+                        timestamp = info.date_time.format("%Y-%m-%d %H:%M:%S"),
+                        indent = "",
+                        arrow = if new { " " } else { "[93m^" },
+                        id = info.id,
+                    ));
+
+                    for (k, v) in &info.records {
+                        match *k {
+                            "request_method" | "request_path" => continue,
+                            k => {
+                                #[cfg(feature = "multi-line")]
+                                drop(write!(
+                                    out,
+                                    "\n{indent:>0$}- [2m{k}: [22m{v}",
+                                    depth * 2 + 22,
+                                    indent = ""
+                                ));
+                                #[cfg(not(feature = "multi-line"))]
+                                drop(write!(out, " [2m{k}: [22m{v}"));
+                            }
+                        }
+                    }
+                } else {
+                    let path = span.metadata().target();
+                    let name = span.name();
+
+                    drop(write!(
+                        out,
+                        "[;2m[{timestamp}][m {indent:>0$}[m{path}{div}[37m{name}{arrow} [37m[{id:04x}][36m",
+                        depth * 2,
+                        timestamp = info.date_time.format("%Y-%m-%d %H:%M:%S"),
+                        indent = "",
+                        div = if path.is_empty() || name.is_empty() { "" } else {"::"},
+                        arrow = if new { " " } else { "[93m^" },
+                        id = info.id,
+                    ));
+
+                    for (k, v) in &info.records {
+                        #[cfg(feature = "multi-line")]
+                        drop(write!(
+                            out,
+                            "\n{indent:>0$}- [2m{k}: [22m{v}",
+                            depth * 2 + 22,
+                            indent = ""
+                        ));
+                        #[cfg(not(feature = "multi-line"))]
+                        drop(write!(out, " [2m{k}: [22m{v}"));
+                    }
+                }
+                drop(writeln!(out, "[m"));
             }
         } else {
-            std::mem::drop(writeln!(out, "[31mFailed to read span info[m"));
+            drop(writeln!(out, "[31mFailed to read span info[m"));
         }
     }
 }
@@ -166,7 +224,7 @@ fn print_event(out: &mut impl std::io::Write, event: &tracing::Event<'_>, depth:
     impl<W: std::io::Write> tracing_subscriber::field::Visit for Messenger<'_, W> {
         fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
             if field.name() == "message" {
-                std::mem::drop(write!(self.0, " {value:?}",));
+                drop(write!(self.0, " {value:?}"));
             }
         }
     }
@@ -176,20 +234,20 @@ fn print_event(out: &mut impl std::io::Write, event: &tracing::Event<'_>, depth:
         fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
             if field.name() != "message" {
                 #[cfg(feature = "multi-line")]
-                std::mem::drop(write!(
+                drop(write!(
                     self.0,
                     "\n{indent:>0$}- [36;2m{field}: [22m{value:?}",
                     self.1 + 22,
                     indent = ""
                 ));
                 #[cfg(not(feature = "multi-line"))]
-                std::mem::drop(write!(self.0, " [36;2m{field}: [22m{value:?}"));
+                drop(write!(self.0, " [36;2m{field}: [22m{value:?}"));
             }
         }
     }
 
     let depth = depth * 2;
-    std::mem::drop(write!(
+    drop(write!(
         out,
         "[;2m[{timestamp}][m {indent:>0$}{level}[m",
         depth,
@@ -216,5 +274,5 @@ fn print_event(out: &mut impl std::io::Write, event: &tracing::Event<'_>, depth:
 
     event.record(&mut Messenger(out));
     event.record(&mut Fielder(out, depth));
-    std::mem::drop(writeln!(out));
+    drop(writeln!(out));
 }

@@ -57,7 +57,7 @@ fn runtime(threads: Threads) -> tokio::runtime::Builder {
 }
 
 pub fn serve(
-    router: axum::Router,
+    router: impl Into<Router>,
     addr: impl Into<std::net::SocketAddr>,
     #[cfg(feature = "threads")] threads: Threads,
 ) -> Result<(), Error> {
@@ -67,12 +67,12 @@ pub fn serve(
     runtime(threads)
         .enable_all()
         .build()?
-        .block_on(server::run(router, addr.into()))
+        .block_on(server::run(router.into(), addr.into()))
         .map_err(Error::from)
 }
 
 pub fn serve_multiple(
-    servers: impl Iterator<Item = (std::net::SocketAddr, axum::Router)>,
+    servers: impl Iterator<Item = (std::net::SocketAddr, Router)>,
     #[cfg(feature = "threads")] threads: Threads,
 ) -> Result<(), Error> {
     #[cfg(not(feature = "threads"))]
@@ -94,6 +94,43 @@ pub fn serve_multiple(
             result
         })
         .map_err(Error::from)
+}
+
+pub enum Router {
+    Simple(axum::Router),
+    Func(Box<dyn FnOnce() -> axum::Router + Send>),
+    Future(std::pin::Pin<Box<dyn std::future::Future<Output = axum::Router> + Send>>),
+}
+
+impl Router {
+    #[must_use]
+    pub fn simple(router: axum::Router) -> Self {
+        Self::Simple(router)
+    }
+
+    #[must_use]
+    pub fn func<F: FnOnce() -> axum::Router + Send + 'static>(func: F) -> Self {
+        Self::Func(Box::new(func))
+    }
+
+    #[must_use]
+    pub fn future<F: std::future::Future<Output = axum::Router> + Send + 'static>(
+        future: F,
+    ) -> Self {
+        Self::Future(Box::pin(future))
+    }
+}
+
+impl From<axum::Router> for Router {
+    fn from(value: axum::Router) -> Self {
+        Self::simple(value)
+    }
+}
+
+impl<F: FnOnce() -> axum::Router + Send + 'static> From<F> for Router {
+    fn from(value: F) -> Self {
+        Self::func(value)
+    }
 }
 
 mod threads {

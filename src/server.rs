@@ -8,8 +8,14 @@ pub enum Error {
     Hyper(#[from] hyper::Error),
 }
 
-pub(super) async fn run(router: axum::Router, addr: std::net::SocketAddr) -> Result<(), Error> {
+pub(super) async fn run(router: crate::Router, addr: std::net::SocketAddr) -> Result<(), Error> {
     let start = std::time::Instant::now();
+
+    let router = match router {
+        crate::Router::Simple(router) => router,
+        crate::Router::Func(func) => func(),
+        crate::Router::Future(future) => future.await,
+    };
 
     let app = router
         .layer(tower_http::catch_panic::CatchPanicLayer::new())

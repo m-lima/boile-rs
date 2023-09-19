@@ -17,7 +17,7 @@ mod trace {
     impl<B> tower_http::trace::OnResponse<B> for Response {
         fn on_response(
             self,
-            response: &axum::http::Response<B>,
+            response: &hyper::Response<B>,
             latency: std::time::Duration,
             _: &tracing::Span,
         ) {
@@ -41,10 +41,10 @@ mod trace {
             let status = response.status();
             let headers = response.headers();
             let maybe_type = headers
-                .get(axum::http::header::CONTENT_TYPE)
+                .get(hyper::header::CONTENT_TYPE)
                 .and_then(|s| s.to_str().ok());
             let maybe_length = headers
-                .get(axum::http::header::CONTENT_LENGTH)
+                .get(hyper::header::CONTENT_LENGTH)
                 .and_then(|s| s.to_str().ok())
                 .and_then(|s| s.parse::<usize>().ok())
                 .filter(|l| *l > 0);
@@ -80,19 +80,20 @@ mod trace {
     #[derive(Copy, Clone)]
     pub struct Span;
 
-    impl tower_http::trace::MakeSpan<axum::body::Body> for Span {
+    impl tower_http::trace::MakeSpan<hyper::Body> for Span {
         #[cfg(feature = "log-headers")]
-        fn make_span(&mut self, request: &axum::http::Request<axum::body::Body>) -> tracing::Span {
+        fn make_span(&mut self, request: &hyper::Request<hyper::Body>) -> tracing::Span {
             let method = request.method();
             let uri = request.uri();
             let headers = request.headers();
-            tracing::info_span!(target: env!("CARGO_CRATE_NAME"), "request", %method, %uri, ?headers)
+            // tracing::info_span!(target: env!("CARGO_CRATE_NAME"), "request", %method, %uri, ?headers)
+            tracing::info_span!(target: "", "", request_method = %method, request_path = %uri, ?headers)
         }
         #[cfg(not(feature = "log-headers"))]
-        fn make_span(&mut self, request: &axum::http::Request<axum::body::Body>) -> tracing::Span {
+        fn make_span(&mut self, request: &hyper::Request<hyper::Body>) -> tracing::Span {
             let method = request.method();
             let uri = request.uri();
-            tracing::info_span!(target: env!("CARGO_CRATE_NAME"), "request", %method, %uri)
+            tracing::info_span!(target: "", "", request_method = %method, request_path = %uri)
         }
     }
 }
