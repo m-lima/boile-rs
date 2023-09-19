@@ -1,86 +1,152 @@
-use crate::log;
-
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Could not hook on shutdown signal: {0}")]
-    Tokio(#[from] tokio::io::Error),
-    #[error("Error while serving: {0}")]
-    Hyper(#[from] hyper::Error),
+    #[cfg(feature = "rt-shutdown")]
+    #[error(transparent)]
+    Shutdown(#[from] crate::rt::shutdown::Error),
+    #[cfg(feature = "rt")]
+    #[error(transparent)]
+    Runtime(#[from] crate::rt::Error),
+    #[cfg(feature = "rt")]
+    #[error("Could not join task: {0}")]
+    TaskJoin(#[from] tokio::task::JoinError),
+    #[error(transparent)]
+    Server(#[from] hyper::Error),
 }
 
-pub(super) async fn run(router: crate::Router, addr: std::net::SocketAddr) -> Result<(), Error> {
+pub async fn run(
+    router: impl Into<Router>,
+    addr: impl Into<std::net::SocketAddr>,
+) -> Result<(), Error> {
     let start = std::time::Instant::now();
 
-    let router = match router {
-        crate::Router::Simple(router) => router,
-        crate::Router::Func(func) => func(),
-        crate::Router::Future(future) => future.await,
+    #[cfg(feature = "log")]
+    tracing::info!("Building router");
+
+    let router = match router.into() {
+        Router::Simple(router) => router,
+        Router::Func(func) => func(),
+        Router::Future(future) => future.await,
     };
 
-    let app = router
-        .layer(tower_http::catch_panic::CatchPanicLayer::new())
-        .layer(log::tower::layer());
+    #[cfg(feature = "panic")]
+    let router = router.layer(crate::panic::CatchPanicLayer::new());
 
+    #[cfg(feature = "log-tower")]
+    let router = router.layer(crate::log::tower::layer());
+
+    #[cfg(feature = "log")]
+    tracing::info!("Router built");
+
+    let addr = addr.into();
+
+    #[cfg(feature = "log")]
     tracing::info!(%addr, "Binding to address");
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .with_graceful_shutdown(shutdown::hook()?)
-        .await?;
+    let server = hyper::Server::bind(&addr).serve(router.into_make_service());
+
+    #[cfg(feature = "rt-shutdown")]
+    let server = server.with_graceful_shutdown(crate::rt::Shutdown::new()?);
+
+    server.await?;
 
     tracing::info!(duration = ?start.elapsed(), "Server gracefully shutdown");
     Ok(())
 }
 
-#[cfg(unix)]
-mod shutdown {
+pub enum Router {
+    Simple(axum::Router),
+    Func(Box<dyn FnOnce() -> axum::Router + Send>),
+    Future(std::pin::Pin<Box<dyn std::future::Future<Output = axum::Router> + Send>>),
+}
 
-    pub(super) fn hook() -> Result<Shutdown, super::Error> {
-        Ok(Shutdown(
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?,
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?,
-        ))
+impl Router {
+    #[must_use]
+    pub fn simple(router: axum::Router) -> Self {
+        Self::Simple(router)
     }
 
-    pub(super) struct Shutdown(tokio::signal::unix::Signal, tokio::signal::unix::Signal);
+    #[must_use]
+    pub fn func<F: FnOnce() -> axum::Router + Send + 'static>(func: F) -> Self {
+        Self::Func(Box::new(func))
+    }
 
-    impl std::future::Future for Shutdown {
-        type Output = ();
-
-        fn poll(
-            mut self: std::pin::Pin<&mut Self>,
-            ctx: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<Self::Output> {
-            match self.0.poll_recv(ctx) {
-                std::task::Poll::Ready(_) => std::task::Poll::Ready(()),
-                std::task::Poll::Pending => match self.1.poll_recv(ctx) {
-                    std::task::Poll::Ready(_) => std::task::Poll::Ready(()),
-                    std::task::Poll::Pending => std::task::Poll::Pending,
-                },
-            }
-        }
+    #[must_use]
+    pub fn future<F: std::future::Future<Output = axum::Router> + Send + 'static>(
+        future: F,
+    ) -> Self {
+        Self::Future(Box::pin(future))
     }
 }
 
-#[cfg(windows)]
-mod shutdown {
-    pub(super) fn new() -> Result<Self, Error> {
-        Ok(Self(tokio::signal::windows::ctrl_c()?))
+impl From<axum::Router> for Router {
+    fn from(value: axum::Router) -> Self {
+        Self::simple(value)
+    }
+}
+
+impl<F: FnOnce() -> axum::Router + Send + 'static> From<F> for Router {
+    fn from(value: F) -> Self {
+        Self::func(value)
+    }
+}
+
+#[cfg(feature = "rt")]
+#[cfg(feature = "rt-threads")]
+pub use inner::start;
+
+#[cfg(feature = "rt")]
+#[cfg(not(feature = "rt-threads"))]
+pub use inner::start;
+
+#[cfg(feature = "rt")]
+mod inner {
+    use super::{run, Error, Router};
+
+    #[cfg(feature = "rt-threads")]
+    pub fn start(
+        router: impl Into<Router>,
+        addr: impl Into<std::net::SocketAddr>,
+        #[cfg(feature = "rt-threads")] threads: crate::rt::Threads,
+    ) -> Result<(), Error> {
+        crate::rt::block_on(run(router, addr), threads)?
     }
 
-    pub(super) struct Shutdown(tokio::signal::windows::CtrlC);
+    #[cfg(not(feature = "rt-threads"))]
+    pub fn start(
+        router: impl Into<Router>,
+        addr: impl Into<std::net::SocketAddr>,
+    ) -> Result<(), Error> {
+        crate::rt::block_on(run(router, addr))?
+    }
 
-    impl std::future::Future for Shutdown {
-        type Output = ();
+    #[cfg(feature = "rt-threads")]
+    pub fn start_multiple(
+        servers: impl Iterator<Item = (std::net::SocketAddr, Router)>,
+        threads: crate::rt::Threads,
+    ) -> Result<(), Error> {
+        crate::rt::block_on(spawn_servers(servers), threads)?
+    }
 
-        fn poll(
-            mut self: std::pin::Pin<&mut Self>,
-            ctx: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<Self::Output> {
-            match self.0.poll_recv(ctx) {
-                std::task::Poll::Ready(_) => std::task::Poll::Ready(()),
-                std::task::Poll::Pending => std::task::Poll::Pending,
+    #[cfg(feature = "rt")]
+    #[cfg(not(feature = "rt-threads"))]
+    pub fn start_multiple(
+        servers: impl Iterator<Item = (std::net::SocketAddr, Router)>,
+    ) -> Result<(), Error> {
+        crate::rt::block_on(spawn_servers(servers))?
+    }
+
+    async fn spawn_servers(
+        servers: impl Iterator<Item = (std::net::SocketAddr, Router)>,
+    ) -> Result<(), Error> {
+        let mut result = Ok(());
+        let servers = servers
+            .map(|(addr, router)| tokio::spawn(run(router, addr)))
+            .collect::<Vec<_>>();
+        for server in servers {
+            if let Err(e) = server.await {
+                result = Err(Error::TaskJoin(e));
             }
         }
+        result
     }
 }

@@ -4,27 +4,73 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["threads", "log-spans", "export"]
-export = []                         # Re-export dependencies
-log = []                            # Enable logging
-log-headers = ["log"]               # Log the request headers
-log-spans = ["log"]                 # Always log spans even when no events are emitted
-multi-line = []                     # Display the log fields in separate lines
-threads = ["tokio/rt-multi-thread"] # Use multi-thread with tokio
+default = ["log-spans", "log-tower", "rt-threads", "rt-shutdown", "panic", "server"]
+
+# Enable logging
+log = [
+  "dep:chrono",
+  "dep:rand",
+  "dep:tracing",
+  "dep:tracing-subscriber",
+]
+# Log the request headers
+log-headers = ["log"]
+# Always log spans even when no events are emitted
+log-spans = ["log"]
+# Display the log fields in separate lines
+log-multi-line = ["log"]
+# Enable request tracing layer
+log-tower = [
+  "log",
+  "dep:hyper",
+  "dep:tower-http",
+  "tower-http/trace",
+]
+
+# Enable tokio runtime
+rt = ["dep:tokio"]
+# Use multi-thread with tokio
+rt-threads = [
+  "rt",
+  "tokio/rt-multi-thread",
+]
+rt-threads-clap = [
+  "rt-threads",
+  "dep:clap",
+]
+rt-shutdown = [
+  "rt",
+  "tokio/signal",
+]
+
+# Enable tower panic handling
+panic = [
+  "dep:tower-http",
+  "tower-http/catch-panic",
+]
+
+# Enable axum
+server = [
+  "dep:axum",
+  "dep:hyper",
+]
 
 [dependencies]
-axum = "0.6.7"
-tower-http = { version = "0.3.5", features = ["trace", "catch-panic"] }
-hyper = { version = "0.14.24", default-features = false }
 
-# Runtime
-tokio = { version = "1.25.0", features = ["signal"] }
+# Log
+chrono = { version = "0.4", default-features = false, features = ["clock"], optional = true }
+rand = { version = "0.8", default-features = false, features = ["std", "std_rng"], optional = true }
+tower-http = { version = "0.4", default-features = false, optional = true }
+tracing = { version = "0.1", default-features = false, optional = true }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["registry"], optional = true }
+
+# Rt
+tokio = { version = "1.32", default-features = false, features = ["rt"], optional = true }
+clap = { version = "4.4", default-features = false, features = ["std", "derive"], optional = true }
+
+# Server
+axum = { version = "0.6", default-features = false, optional = true }
+hyper = { version = "0.14", default-features = false, optional = true }
 
 # Error
-thiserror = "1.0.38"
-
-# Trace
-tracing = "0.1.37"
-tracing-subscriber =  "0.3.16"
-chrono = "0.4.23"
-rand = "0.8.5"
+thiserror = "1.0"

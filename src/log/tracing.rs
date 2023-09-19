@@ -1,10 +1,15 @@
-pub struct Layer {
+#[must_use]
+pub fn layer() -> impl tracing_subscriber::Layer<tracing_subscriber::Registry> {
+    Layer::new()
+}
+
+struct Layer {
     last_span: std::sync::atomic::AtomicU64,
 }
 
 impl Layer {
     #[must_use]
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             last_span: std::sync::atomic::AtomicU64::new(0),
         }

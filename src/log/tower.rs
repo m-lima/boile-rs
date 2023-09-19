@@ -1,4 +1,5 @@
-pub(in super::super) fn layer() -> tower_http::trace::TraceLayer<
+#[must_use]
+pub fn layer() -> tower_http::trace::TraceLayer<
     tower_http::classify::SharedClassifier<tower_http::classify::ServerErrorsAsFailures>,
     trace::Span,
     tower_http::trace::DefaultOnRequest,
@@ -81,7 +82,6 @@ mod trace {
     pub struct Span;
 
     impl tower_http::trace::MakeSpan<hyper::Body> for Span {
-        #[cfg(not(feature = "log-headers"))]
         fn make_span(&mut self, request: &hyper::Request<hyper::Body>) -> tracing::Span {
             let method = request.method();
             let uri = request.uri();
@@ -108,15 +108,15 @@ mod trace {
             }
 
             match *method {
-                axum::http::Method::OPTIONS => log_event!("OPTIONS"),
-                axum::http::Method::GET => log_event!("GET"),
-                axum::http::Method::POST => log_event!("POST"),
-                axum::http::Method::PUT => log_event!("PUT"),
-                axum::http::Method::DELETE => log_event!("DELETE"),
-                axum::http::Method::HEAD => log_event!("HEAD"),
-                axum::http::Method::TRACE => log_event!("TRACE"),
-                axum::http::Method::CONNECT => log_event!("CONNECT"),
-                axum::http::Method::PATCH => log_event!("PATCH"),
+                hyper::Method::OPTIONS => log_event!("OPTIONS"),
+                hyper::Method::GET => log_event!("GET"),
+                hyper::Method::POST => log_event!("POST"),
+                hyper::Method::PUT => log_event!("PUT"),
+                hyper::Method::DELETE => log_event!("DELETE"),
+                hyper::Method::HEAD => log_event!("HEAD"),
+                hyper::Method::TRACE => log_event!("TRACE"),
+                hyper::Method::CONNECT => log_event!("CONNECT"),
+                hyper::Method::PATCH => log_event!("PATCH"),
                 _ => log_event!("EXTENSION"),
             }
         }
