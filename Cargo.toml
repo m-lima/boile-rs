@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-default = ["log-spans", "log-tower", "rt-threads", "rt-shutdown", "panic", "server"]
+default = ["log-spans", "log-tower", "rt-threads", "rt-shutdown", "panic", "server-h1"]
 
 # Enable logging
 log = [
@@ -49,10 +49,22 @@ panic = [
   "tower-http/catch-panic",
 ]
 
-# Enable axum
-server = [
+# Enable axum with http1
+server-h1 = [
   "dep:axum",
   "dep:hyper",
+  "hyper/server",
+  "hyper/tcp",
+  "hyper/http1",
+]
+
+# Enable axum with http2
+server-h2 = [
+  "dep:axum",
+  "dep:hyper",
+  "hyper/server",
+  "hyper/tcp",
+  "hyper/http2",
 ]
 
 [dependencies]

@@ -17,6 +17,7 @@ pub async fn run(
     router: impl Into<Router>,
     addr: impl Into<std::net::SocketAddr>,
 ) -> Result<(), Error> {
+    #[cfg(feature = "log")]
     let start = std::time::Instant::now();
 
     #[cfg(feature = "log")]
@@ -49,7 +50,9 @@ pub async fn run(
 
     server.await?;
 
+    #[cfg(feature = "log")]
     tracing::info!(duration = ?start.elapsed(), "Server gracefully shutdown");
+
     Ok(())
 }
 
@@ -91,62 +94,42 @@ impl<F: FnOnce() -> axum::Router + Send + 'static> From<F> for Router {
 }
 
 #[cfg(feature = "rt")]
-#[cfg(feature = "rt-threads")]
-pub use inner::start;
+pub fn start(
+    router: impl Into<Router>,
+    addr: impl Into<std::net::SocketAddr>,
+    #[cfg(feature = "rt-threads")] threads: crate::rt::Threads,
+) -> Result<(), Error> {
+    crate::rt::block_on(
+        run(router, addr),
+        #[cfg(feature = "rt-threads")]
+        threads,
+    )?
+}
 
 #[cfg(feature = "rt")]
-#[cfg(not(feature = "rt-threads"))]
-pub use inner::start;
+pub fn start_multiple(
+    servers: impl Iterator<Item = (std::net::SocketAddr, Router)>,
+    #[cfg(feature = "rt-threads")] threads: crate::rt::Threads,
+) -> Result<(), Error> {
+    crate::rt::block_on(
+        spawn_servers(servers),
+        #[cfg(feature = "rt-threads")]
+        threads,
+    )?
+}
 
 #[cfg(feature = "rt")]
-mod inner {
-    use super::{run, Error, Router};
-
-    #[cfg(feature = "rt-threads")]
-    pub fn start(
-        router: impl Into<Router>,
-        addr: impl Into<std::net::SocketAddr>,
-        #[cfg(feature = "rt-threads")] threads: crate::rt::Threads,
-    ) -> Result<(), Error> {
-        crate::rt::block_on(run(router, addr), threads)?
-    }
-
-    #[cfg(not(feature = "rt-threads"))]
-    pub fn start(
-        router: impl Into<Router>,
-        addr: impl Into<std::net::SocketAddr>,
-    ) -> Result<(), Error> {
-        crate::rt::block_on(run(router, addr))?
-    }
-
-    #[cfg(feature = "rt-threads")]
-    pub fn start_multiple(
-        servers: impl Iterator<Item = (std::net::SocketAddr, Router)>,
-        threads: crate::rt::Threads,
-    ) -> Result<(), Error> {
-        crate::rt::block_on(spawn_servers(servers), threads)?
-    }
-
-    #[cfg(feature = "rt")]
-    #[cfg(not(feature = "rt-threads"))]
-    pub fn start_multiple(
-        servers: impl Iterator<Item = (std::net::SocketAddr, Router)>,
-    ) -> Result<(), Error> {
-        crate::rt::block_on(spawn_servers(servers))?
-    }
-
-    async fn spawn_servers(
-        servers: impl Iterator<Item = (std::net::SocketAddr, Router)>,
-    ) -> Result<(), Error> {
-        let mut result = Ok(());
-        let servers = servers
-            .map(|(addr, router)| tokio::spawn(run(router, addr)))
-            .collect::<Vec<_>>();
-        for server in servers {
-            if let Err(e) = server.await {
-                result = Err(Error::TaskJoin(e));
-            }
+async fn spawn_servers(
+    servers: impl Iterator<Item = (std::net::SocketAddr, Router)>,
+) -> Result<(), Error> {
+    let mut result = Ok(());
+    let servers = servers
+        .map(|(addr, router)| tokio::spawn(run(router, addr)))
+        .collect::<Vec<_>>();
+    for server in servers {
+        if let Err(e) = server.await {
+            result = Err(Error::TaskJoin(e));
         }
-        result
     }
+    result
 }

@@ -18,13 +18,13 @@ pub struct Error(#[from] tokio::io::Error);
 #[must_use]
 pub fn runtime(threads: Threads) -> tokio::runtime::Builder {
     #[cfg(feature = "log")]
-    tracing::info!(?threads, "Building tokio runtime");
+    tracing::info!(%threads, "Building tokio runtime");
     match threads {
         Threads::Single => tokio::runtime::Builder::new_current_thread(),
         Threads::Auto => tokio::runtime::Builder::new_multi_thread(),
-        Threads::Multi(t) => {
+        Threads::Multi(threads::Count(count)) => {
             let mut rt = tokio::runtime::Builder::new_multi_thread();
-            rt.worker_threads(usize::from(t));
+            rt.worker_threads(usize::from(count));
             rt
         }
     }
@@ -34,18 +34,20 @@ pub fn runtime(threads: Threads) -> tokio::runtime::Builder {
 #[must_use]
 pub fn runtime() -> tokio::runtime::Builder {
     #[cfg(feature = "log")]
-    tracing::info!(threads = 1, "Building tokio runtime");
+    tracing::info!(threads = %"Single", "Building tokio runtime");
     tokio::runtime::Builder::new_current_thread()
 }
 
-#[cfg(feature = "rt-threads")]
 #[must_use]
-pub fn block_on<F: std::future::Future>(future: F, threads: Threads) -> Result<F::Output, Error> {
-    Ok(runtime(threads).enable_all().build()?.block_on(future))
-}
-
-#[cfg(not(feature = "rt-threads"))]
-#[must_use]
-pub fn block_on<F: std::future::Future>(future: F) -> Result<F::Output, Error> {
-    Ok(runtime().enable_all().build()?.block_on(future))
+pub fn block_on<F: std::future::Future>(
+    future: F,
+    #[cfg(feature = "rt-threads")] threads: Threads,
+) -> Result<F::Output, Error> {
+    Ok(runtime(
+        #[cfg(feature = "rt-threads")]
+        threads,
+    )
+    .enable_all()
+    .build()?
+    .block_on(future))
 }

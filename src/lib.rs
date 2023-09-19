@@ -7,5 +7,5 @@ pub mod rt;
 #[cfg(feature = "panic")]
 pub mod panic;
 
-#[cfg(feature = "server")]
+#[cfg(any(feature = "server-h1", feature = "server-h2"))]
 pub mod server;
