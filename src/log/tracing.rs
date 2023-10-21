@@ -114,12 +114,18 @@ impl tracing_subscriber::Layer<tracing_subscriber::Registry> for Layer {
         id: tracing::span::Id,
         ctx: tracing_subscriber::layer::Context<'_, tracing_subscriber::Registry>,
     ) {
-        let prev_span = ctx
-            .span(&id)
-            .and_then(|s| s.parent())
-            .map_or(0, |p| p.id().into_u64());
-        self.last_span
-            .store(prev_span, std::sync::atomic::Ordering::Relaxed);
+        let lock = std::io::stdout().lock();
+        let last_span = self.last_span.load(std::sync::atomic::Ordering::Relaxed);
+
+        if last_span == id.into_u64() {
+            let prev_span = ctx
+                .span(&id)
+                .and_then(|s| s.parent())
+                .map_or(0, |p| p.id().into_u64());
+            self.last_span
+                .store(prev_span, std::sync::atomic::Ordering::Relaxed);
+        }
+        drop(lock);
     }
 }
 
@@ -264,5 +270,5 @@ fn print_event(out: &mut impl std::io::Write, event: &tracing::Event<'_>, depth:
 
     event.record(&mut Messenger(out));
     event.record(&mut Fielder(out, depth));
-    drop(writeln!(out));
+    drop(writeln!(out, "[m"));
 }

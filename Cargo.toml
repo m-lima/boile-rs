@@ -1,10 +1,10 @@
 [package]
 name = "boile-rs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [features]
-default = ["log-spans", "log-tower", "rt-threads", "rt-shutdown", "panic", "server-h1"]
+default = []
 
 # Enable logging
 log = [
