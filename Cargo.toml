@@ -34,8 +34,8 @@ rt-threads = [
   "rt",
   "tokio/rt-multi-thread",
 ]
-rt-threads-clap = [
-  "rt-threads",
+rt-clap = [
+  "rt",
   "dep:clap",
 ]
 rt-shutdown = [

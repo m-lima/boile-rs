@@ -254,10 +254,10 @@ fn print_event(out: &mut impl std::io::Write, event: &tracing::Event<'_>, depth:
                 "[94mTRACE"
             }
             tracing::Level::DEBUG => {
-                "[32mDEBUG"
+                "[34mDEBUG"
             }
             tracing::Level::INFO => {
-                "[34mINFO"
+                "[32mINFO"
             }
             tracing::Level::WARN => {
                 "[33mWARN"
