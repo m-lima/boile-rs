@@ -1,22 +1,24 @@
 #[must_use]
-pub fn layer() -> impl tracing_subscriber::Layer<tracing_subscriber::Registry> {
-    Layer::new()
+pub fn layer<O: super::Output>() -> impl tracing_subscriber::Layer<tracing_subscriber::Registry> {
+    Layer::<O>::new()
 }
 
-struct Layer {
+struct Layer<O: super::Output> {
     last_span: std::sync::atomic::AtomicU64,
+    _output: std::marker::PhantomData<O>,
 }
 
-impl Layer {
+impl<O: super::Output> Layer<O> {
     #[must_use]
     fn new() -> Self {
         Self {
             last_span: std::sync::atomic::AtomicU64::new(0),
+            _output: std::marker::PhantomData,
         }
     }
 }
 
-impl Default for Layer {
+impl<O: super::Output> Default for Layer<O> {
     fn default() -> Self {
         Self::new()
     }
@@ -51,7 +53,7 @@ impl SpanInfo {
     }
 }
 
-impl tracing_subscriber::Layer<tracing_subscriber::Registry> for Layer {
+impl<O: super::Output> tracing_subscriber::Layer<tracing_subscriber::Registry> for Layer<O> {
     fn on_new_span(
         &self,
         attrs: &tracing::span::Attributes<'_>,
@@ -65,7 +67,7 @@ impl tracing_subscriber::Layer<tracing_subscriber::Registry> for Layer {
 
             #[cfg(feature = "log-spans")]
             {
-                let mut stdout = std::io::stdout().lock();
+                let mut stdout = O::lock();
 
                 let depth = ctx.span_scope(id).map_or(0, std::iter::Iterator::count);
                 let last_span = self.last_span.load(std::sync::atomic::Ordering::Relaxed);
@@ -88,7 +90,7 @@ impl tracing_subscriber::Layer<tracing_subscriber::Registry> for Layer {
         event: &tracing::Event<'_>,
         ctx: tracing_subscriber::layer::Context<'_, tracing_subscriber::Registry>,
     ) {
-        let mut stdout = std::io::stdout().lock();
+        let mut stdout = O::lock();
 
         let depth = ctx.event_scope(event).map_or(0, std::iter::Iterator::count);
         let current_span = ctx.current_span().id().and_then(|id| ctx.span(id));
@@ -114,7 +116,7 @@ impl tracing_subscriber::Layer<tracing_subscriber::Registry> for Layer {
         id: tracing::span::Id,
         ctx: tracing_subscriber::layer::Context<'_, tracing_subscriber::Registry>,
     ) {
-        let lock = std::io::stdout().lock();
+        let lock = O::lock();
         let last_span = self.last_span.load(std::sync::atomic::Ordering::Relaxed);
 
         if last_span == id.into_u64() {
