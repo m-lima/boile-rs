@@ -1,26 +1,22 @@
 #[must_use]
-pub fn layer<O: super::Output>() -> impl tracing_subscriber::Layer<tracing_subscriber::Registry> {
-    Layer::<O>::new()
+pub fn layer<O: super::Output>(
+    output: O,
+) -> impl tracing_subscriber::Layer<tracing_subscriber::Registry> {
+    Layer::<O>::new(output)
 }
 
 struct Layer<O: super::Output> {
     last_span: std::sync::atomic::AtomicU64,
-    _output: std::marker::PhantomData<O>,
+    output: O,
 }
 
 impl<O: super::Output> Layer<O> {
     #[must_use]
-    fn new() -> Self {
+    pub fn new(output: O) -> Self {
         Self {
             last_span: std::sync::atomic::AtomicU64::new(0),
-            _output: std::marker::PhantomData,
+            output,
         }
-    }
-}
-
-impl<O: super::Output> Default for Layer<O> {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -67,7 +63,7 @@ impl<O: super::Output> tracing_subscriber::Layer<tracing_subscriber::Registry> f
 
             #[cfg(feature = "log-spans")]
             {
-                let mut stdout = O::lock();
+                let mut stdout = self.output.lock();
 
                 let depth = ctx.span_scope(id).map_or(0, std::iter::Iterator::count);
                 let last_span = self.last_span.load(std::sync::atomic::Ordering::Relaxed);
@@ -90,7 +86,7 @@ impl<O: super::Output> tracing_subscriber::Layer<tracing_subscriber::Registry> f
         event: &tracing::Event<'_>,
         ctx: tracing_subscriber::layer::Context<'_, tracing_subscriber::Registry>,
     ) {
-        let mut stdout = O::lock();
+        let mut stdout = self.output.lock();
 
         let depth = ctx.event_scope(event).map_or(0, std::iter::Iterator::count);
         let current_span = ctx.current_span().id().and_then(|id| ctx.span(id));
@@ -116,7 +112,7 @@ impl<O: super::Output> tracing_subscriber::Layer<tracing_subscriber::Registry> f
         id: tracing::span::Id,
         ctx: tracing_subscriber::layer::Context<'_, tracing_subscriber::Registry>,
     ) {
-        let lock = O::lock();
+        let lock = self.output.lock();
         let last_span = self.last_span.load(std::sync::atomic::Ordering::Relaxed);
 
         if last_span == id.into_u64() {
