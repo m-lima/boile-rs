@@ -4,10 +4,10 @@ pub mod shutdown;
 #[cfg(feature = "rt-shutdown")]
 pub use shutdown::Shutdown;
 
-#[cfg(feature = "rt-clap")]
+#[cfg(feature = "rt-threads")]
 pub mod threads;
 
-#[cfg(feature = "rt-clap")]
+#[cfg(feature = "rt-threads")]
 pub use threads::Threads;
 
 #[derive(Debug, thiserror::Error)]
