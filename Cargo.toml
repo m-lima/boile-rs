@@ -12,6 +12,9 @@ log = [
   "dep:rand",
   "dep:tracing",
   "dep:tracing-subscriber",
+  "chrono/clock",
+  "rand/thread_rng",
+  "tracing-subscriber/registry",
 ]
 # Log the request headers
 log-headers = ["log"]
@@ -28,7 +31,10 @@ log-tower = [
 ]
 
 # Enable tokio runtime
-rt = ["dep:tokio"]
+rt = [
+  "dep:tokio",
+  "tokio/rt",
+]
 # Use multi-thread with tokio
 rt-threads = [
   "rt",
@@ -49,36 +55,42 @@ panic = [
 server-h1 = [
   "dep:axum",
   "dep:hyper",
-  "hyper/server",
-  "hyper/tcp",
+  "dep:tokio",
+  "axum/http1",
+  "axum/tokio",
   "hyper/http1",
+  "hyper/server",
+  "tokio/net",
 ]
 
 # Enable axum with http2
 server-h2 = [
   "dep:axum",
   "dep:hyper",
-  "hyper/server",
-  "hyper/tcp",
+  "dep:tokio",
+  "axum/http2",
+  "axum/tokio",
   "hyper/http2",
+  "hyper/server",
+  "tokio/net",
 ]
 
 [dependencies]
 
 # Log
-chrono = { version = "0.4", default-features = false, features = ["clock"], optional = true }
-rand = { version = "0.8", default-features = false, features = ["std", "std_rng"], optional = true }
-tower-http = { version = "0.4", default-features = false, optional = true }
+chrono = { version = "0.4", default-features = false, optional = true }
+rand = { version = "0.9", default-features = false, optional = true }
+tower-http = { version = "0.6", default-features = false, optional = true }
 tracing = { version = "0.1", default-features = false, optional = true }
-tracing-subscriber = { version = "0.3", default-features = false, features = ["registry"], optional = true }
+tracing-subscriber = { version = "0.3", default-features = false, optional = true }
 
 # Rt
-tokio = { version = "1.32", default-features = false, features = ["rt"], optional = true }
-clap = { version = "4.4", default-features = false, features = ["std", "derive"], optional = true }
+tokio = { version = "1.43", default-features = false, optional = true }
+clap = { version = "4.5", default-features = false, features = ["std", "derive"], optional = true }
 
 # Server
-axum = { version = "0.6", default-features = false, optional = true }
-hyper = { version = "0.14", default-features = false, optional = true }
+axum = { version = "0.8", default-features = false, optional = true }
+hyper = { version = "1.6", default-features = false, optional = true }
 
 # Error
-thiserror = "1.0"
+thiserror = "2.0"

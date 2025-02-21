@@ -11,6 +11,8 @@ pub enum Error {
     TaskJoin(#[from] tokio::task::JoinError),
     #[error(transparent)]
     Server(#[from] hyper::Error),
+    #[error(transparent)]
+    Io(#[from] tokio::io::Error),
 }
 
 pub async fn run(
@@ -43,7 +45,8 @@ pub async fn run(
     #[cfg(feature = "log")]
     tracing::info!(%addr, "Binding to address");
 
-    let server = hyper::Server::bind(&addr).serve(router.into_make_service());
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    let server = axum::serve(listener, router.into_make_service());
 
     #[cfg(feature = "rt-shutdown")]
     let server = server.with_graceful_shutdown(crate::rt::Shutdown::new()?);

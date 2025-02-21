@@ -81,8 +81,8 @@ mod trace {
     #[derive(Copy, Clone)]
     pub struct Span;
 
-    impl tower_http::trace::MakeSpan<hyper::Body> for Span {
-        fn make_span(&mut self, request: &hyper::Request<hyper::Body>) -> tracing::Span {
+    impl<B: hyper::body::Body> tower_http::trace::MakeSpan<B> for Span {
+        fn make_span(&mut self, request: &hyper::Request<B>) -> tracing::Span {
             let method = request.method();
             let uri = request.uri();
 
