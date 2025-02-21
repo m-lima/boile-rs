@@ -15,7 +15,6 @@ impl Threads {
         Self::Auto
     }
 
-    #[must_use]
     pub fn count(count: u8) -> Result<Self, Error> {
         if count == 0 {
             Err(Error)
@@ -69,4 +68,6 @@ macro_rules! impl_fmt {
     };
 }
 
-impl_fmt!(Display, Debug, Octal, Binary, UpperHex, LowerHex, UpperExp, LowerExp);
+impl_fmt!(
+    Display, Debug, Octal, Binary, UpperHex, LowerHex, UpperExp, LowerExp
+);

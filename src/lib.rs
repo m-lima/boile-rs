@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc)]
+
 #[cfg(feature = "log")]
 pub mod log;
 

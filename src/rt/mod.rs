@@ -38,7 +38,6 @@ pub fn runtime() -> tokio::runtime::Builder {
     tokio::runtime::Builder::new_current_thread()
 }
 
-#[must_use]
 pub fn block_on<F: std::future::Future>(
     future: F,
     #[cfg(feature = "rt-threads")] threads: Threads,

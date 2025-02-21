@@ -133,21 +133,6 @@ fn print_span(
     depth: usize,
     span: Option<&tracing_subscriber::registry::SpanRef<'_, tracing_subscriber::Registry>>,
 ) {
-    struct SpecialField<'w, W>(&'w mut W, &'static str);
-    impl<W: std::io::Write> tracing_subscriber::field::Visit for SpecialField<'_, W> {
-        fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-            if field.name() == self.1 {
-                drop(write!(self.0, "{value}"));
-            }
-        }
-
-        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-            if field.name() == self.1 {
-                drop(write!(self.0, "{value:?}"));
-            }
-        }
-    }
-
     if let Some(span) = span {
         if let Some(info) = span.extensions().get::<SpanInfo>() {
             let new = info.new.swap(false, std::sync::atomic::Ordering::Relaxed);
@@ -195,14 +180,14 @@ fn print_span(
                         continue;
                     }
 
-                    #[cfg(feature = "multi-line")]
+                    #[cfg(feature = "log-multi-line")]
                     drop(write!(
                         out,
                         "\n{indent:>0$}- [2m{k}: [22m{v}",
                         depth * 2 + 22,
                         indent = ""
                     ));
-                    #[cfg(not(feature = "multi-line"))]
+                    #[cfg(not(feature = "log-multi-line"))]
                     drop(write!(out, " [2m{k}: [22m{v}"));
                 }
                 drop(writeln!(out, "[m"));
@@ -223,18 +208,18 @@ fn print_event(out: &mut impl std::io::Write, event: &tracing::Event<'_>, depth:
         }
     }
 
-    struct Fielder<'w, W>(&'w mut W, usize);
+    struct Fielder<'w, W>(&'w mut W, #[cfg(feature = "log-multi-line")] usize);
     impl<W: std::io::Write> tracing_subscriber::field::Visit for Fielder<'_, W> {
         fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
             if field.name() != "message" {
-                #[cfg(feature = "multi-line")]
+                #[cfg(feature = "log-multi-line")]
                 drop(write!(
                     self.0,
                     "\n{indent:>0$}- [36;2m{field}: [22m{value:?}",
                     self.1 + 22,
                     indent = ""
                 ));
-                #[cfg(not(feature = "multi-line"))]
+                #[cfg(not(feature = "log-multi-line"))]
                 drop(write!(self.0, " [36;2m{field}: [22m{value:?}"));
             }
         }
@@ -267,6 +252,10 @@ fn print_event(out: &mut impl std::io::Write, event: &tracing::Event<'_>, depth:
     ));
 
     event.record(&mut Messenger(out));
-    event.record(&mut Fielder(out, depth));
+    event.record(&mut Fielder(
+        out,
+        #[cfg(feature = "log-multi-line")]
+        depth,
+    ));
     drop(writeln!(out, "[m"));
 }
